@@ -12,7 +12,7 @@ import torch
 from PIL import Image, ImageDraw
 from tqdm.auto import tqdm
 
-from starter.utils import get_device, get_mesh_renderer
+from utils import get_device, get_mesh_renderer
 
 
 def dolly_zoom(
@@ -25,17 +25,22 @@ def dolly_zoom(
     if device is None:
         device = get_device()
 
-    mesh = pytorch3d.io.load_objs_as_meshes(["cow_on_plane/cow_on_plane.obj"])
+    mesh = pytorch3d.io.load_objs_as_meshes(["data/cow_on_plane.obj"])
     mesh = mesh.to(device)
     renderer = get_mesh_renderer(image_size=image_size, device=device)
     lights = pytorch3d.renderer.PointLights(location=[[0.0, 0.0, -3.0]], device=device)
 
-    fovs = torch.linspace(5, 120, num_frames)
+    fov_min, fov_max = 5, 120
+    distance_min, distance_max = 2, 3
+    fovs = torch.concat([torch.linspace(fov_max, fov_min, num_frames//2),torch.linspace(fov_min, fov_max, num_frames//2)])
+    dinstances = torch.concat([torch.linspace(distance_max, distance_min, num_frames//2), torch.linspace(distance_min, distance_max, num_frames//2)])
+
+    print("Rendering frames...")
+    print(fovs.shape)
 
     renders = []
-    for fov in tqdm(fovs):
-        distance = 3  # TODO: change this.
-        T = [[0, 0, 3]]  # TODO: Change this.
+    for fov,distance in tqdm(zip(fovs,dinstances),total=num_frames):
+        R, T = pytorch3d.renderer.look_at_view_transform(dist=distance)
         cameras = pytorch3d.renderer.FoVPerspectiveCameras(fov=fov, T=T, device=device)
         rend = renderer(mesh, cameras=cameras, lights=lights)
         rend = rend[0, ..., :3].cpu().numpy()  # (N, H, W, 3)
@@ -52,8 +57,8 @@ def dolly_zoom(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--num_frames", type=int, default=10)
-    parser.add_argument("--duration", type=float, default=3)
+    parser.add_argument("--num_frames", type=int, default=200)
+    parser.add_argument("--duration", type=float, default=10)
     parser.add_argument("--output_file", type=str, default="images/dolly.gif")
     parser.add_argument("--image_size", type=int, default=256)
     args = parser.parse_args()
